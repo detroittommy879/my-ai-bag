@@ -1,0 +1,34 @@
+[package]
+name = "my-ai-bag-floem"
+version = "0.1.0"
+edition = "2024"
+description = "Native Floem and CLI prototype for packing AI coding tool setup folders safely."
+license = "MIT"
+default-run = "my-ai-bag"
+
+[lib]
+name = "my_ai_bag"
+path = "src/lib.rs"
+
+[[bin]]
+name = "aibag"
+path = "src/bin/aibag.rs"
+
+[[bin]]
+name = "my-ai-bag"
+path = "src/bin/my_ai_bag.rs"
+
+[dependencies]
+anyhow = "1"
+argon2 = "0.5"
+base64 = "0.22"
+chacha20poly1305 = "0.10"
+clap = { version = "4", features = ["derive"] }
+dirs = "6"
+floem = { path = "../floem", features = ["skia"] }
+rand = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[dev-dependencies]
+tempfile = "3"

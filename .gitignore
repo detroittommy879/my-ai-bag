@@ -1,0 +1,26 @@
+# Rust build output
+/target/
+
+# My AI Bag local exports and smoke-test archives
+*.aibag
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+
+# Editor and OS files
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Logs and temporary files
+*.log
+*.tmp
+tmp/
+temp/
+

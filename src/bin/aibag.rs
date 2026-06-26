@@ -122,7 +122,7 @@ fn tools() -> Result<()> {
             tool.key,
             tool.display_name,
             tool.global_skills_dir,
-            tool.project_skills_dir.unwrap_or("N/A"),
+            tool.project_skills_dir.as_deref().unwrap_or("N/A"),
             tool.detected_if_exists
         );
     }

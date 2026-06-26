@@ -1,0 +1,214 @@
+# Built-in My AI Bag coding-agent catalog.
+#
+# This file is intentionally TOML instead of JSON so contributors can add or
+# review agents without touching Rust code. Paths are relative to either the
+# user home directory or the current project directory, depending on the field.
+
+[[agents]]
+key = "cursor"
+display_name = "Cursor"
+global_skills_dir = ".cursor/skills"
+project_skills_dir = ".agents/skills"
+detected_if_exists = ".cursor"
+
+[[agents]]
+key = "claude_code"
+display_name = "Claude Code"
+global_skills_dir = ".claude/skills"
+project_skills_dir = ".claude/skills"
+detected_if_exists = ".claude"
+
+[[agents]]
+key = "codex"
+display_name = "Codex"
+global_skills_dir = ".codex/skills"
+project_skills_dir = ".agents/skills"
+detected_if_exists = ".codex"
+
+[[agents]]
+key = "opencode"
+display_name = "OpenCode"
+global_skills_dir = ".config/opencode/skills"
+project_skills_dir = ".agents/skills"
+detected_if_exists = ".config/opencode"
+
+[[agents]]
+key = "antigravity"
+display_name = "Antigravity"
+global_skills_dir = ".gemini/antigravity/skills"
+project_skills_dir = ".agents/skills"
+detected_if_exists = ".gemini/antigravity"
+
+[[agents]]
+key = "amp"
+display_name = "Amp"
+global_skills_dir = ".config/agents/skills"
+project_skills_dir = ".agents/skills"
+detected_if_exists = ".config/agents"
+
+[[agents]]
+key = "kimi_cli"
+display_name = "Kimi Code CLI"
+global_skills_dir = ".config/agents/skills"
+project_skills_dir = ".agents/skills"
+detected_if_exists = ".config/agents"
+
+[[agents]]
+key = "augment"
+display_name = "Augment"
+global_skills_dir = ".augment/skills"
+project_skills_dir = ".augment/skills"
+detected_if_exists = ".augment"
+
+[[agents]]
+key = "openclaw"
+display_name = "OpenClaw"
+global_skills_dir = ".openclaw/skills"
+project_skills_dir = "skills"
+detected_if_exists = ".openclaw"
+
+[[agents]]
+key = "copaw"
+display_name = "Copaw"
+global_skills_dir = ".copaw/skill_pool"
+project_skills_dir = ".copaw/skill_pool"
+detected_if_exists = ".copaw"
+
+[[agents]]
+key = "cline"
+display_name = "Cline"
+global_skills_dir = ".agents/skills"
+project_skills_dir = ".agents/skills"
+detected_if_exists = ".agents"
+
+[[agents]]
+key = "codebuddy"
+display_name = "CodeBuddy"
+global_skills_dir = ".codebuddy/skills"
+project_skills_dir = ".codebuddy/skills"
+detected_if_exists = ".codebuddy"
+
+[[agents]]
+key = "codewhale"
+display_name = "CodeWhale"
+global_skills_dir = ".codewhale/skills"
+project_skills_dir = ".codewhale/skills"
+detected_if_exists = ".codewhale"
+
+[[agents]]
+key = "workbuddy"
+display_name = "WorkBuddy"
+global_skills_dir = ".workbuddy/skills"
+detected_if_exists = ".workbuddy"
+
+[[agents]]
+key = "command_code"
+display_name = "Command Code"
+global_skills_dir = ".commandcode/skills"
+project_skills_dir = ".commandcode/skills"
+detected_if_exists = ".commandcode"
+
+[[agents]]
+key = "continue"
+display_name = "Continue"
+global_skills_dir = ".continue/skills"
+project_skills_dir = ".continue/skills"
+detected_if_exists = ".continue"
+
+[[agents]]
+key = "crush"
+display_name = "Crush"
+global_skills_dir = ".config/crush/skills"
+project_skills_dir = ".crush/skills"
+detected_if_exists = ".config/crush"
+
+[[agents]]
+key = "junie"
+display_name = "Junie"
+global_skills_dir = ".junie/skills"
+project_skills_dir = ".junie/skills"
+detected_if_exists = ".junie"
+
+[[agents]]
+key = "iflow_cli"
+display_name = "iFlow CLI"
+global_skills_dir = ".iflow/skills"
+project_skills_dir = ".iflow/skills"
+detected_if_exists = ".iflow"
+
+[[agents]]
+key = "kiro_cli"
+display_name = "Kiro CLI"
+global_skills_dir = ".kiro/skills"
+project_skills_dir = ".kiro/skills"
+detected_if_exists = ".kiro"
+
+[[agents]]
+key = "kode"
+display_name = "Kode"
+global_skills_dir = ".kode/skills"
+project_skills_dir = ".kode/skills"
+detected_if_exists = ".kode"
+
+[[agents]]
+key = "mcpjam"
+display_name = "MCPJam"
+global_skills_dir = ".mcpjam/skills"
+project_skills_dir = ".mcpjam/skills"
+detected_if_exists = ".mcpjam"
+
+[[agents]]
+key = "mistral_vibe"
+display_name = "Mistral Vibe"
+global_skills_dir = ".vibe/skills"
+project_skills_dir = ".vibe/skills"
+detected_if_exists = ".vibe"
+
+[[agents]]
+key = "mux"
+display_name = "Mux"
+global_skills_dir = ".mux/skills"
+project_skills_dir = ".mux/skills"
+detected_if_exists = ".mux"
+
+[[agents]]
+key = "openclaude"
+display_name = "OpenClaude IDE"
+global_skills_dir = ".openclaude/skills"
+project_skills_dir = ".openclaude/skills"
+detected_if_exists = ".openclaude"
+
+[[agents]]
+key = "openhands"
+display_name = "OpenHands"
+global_skills_dir = ".openhands/skills"
+project_skills_dir = ".openhands/skills"
+detected_if_exists = ".openhands"
+
+[[agents]]
+key = "pi"
+display_name = "Pi"
+global_skills_dir = ".pi/agent/skills"
+project_skills_dir = ".pi/skills"
+detected_if_exists = ".pi"
+
+[[agents]]
+key = "qoder"
+display_name = "Qoder"
+global_skills_dir = ".qoder/skills"
+project_skills_dir = ".qoder/skills"
+detected_if_exists = ".qoder"
+
+[[agents]]
+key = "qoderwork"
+display_name = "QoderWork"
+global_skills_dir = ".qoderwork/skills"
+project_skills_dir = ".qoderwork/skills"
+detected_if_exists = ".qoderwork"
+
+[[agents]]
+key = "qwen_code"
+display_name = "Qwen Code"
+global_skills_dir = ".qwen/skills"
+project_skills_dir = ".qwen/skills"
+detected_if_exists = ".qwen"

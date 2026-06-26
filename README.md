@@ -9,6 +9,8 @@ My AI Bag is a Rust experiment with two fronts:
 
 The prototype looks for skills folders, MCP config, settings files, and auth-looking files by path/name. It never uploads anything and never prints file contents.
 
+The built-in coding-agent list lives in `agents.toml` so new tools can be reviewed in simple pull requests without changing Rust source code.
+
 ## Run
 
 ```powershell

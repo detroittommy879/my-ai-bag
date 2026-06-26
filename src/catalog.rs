@@ -2,228 +2,38 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ToolCatalogEntry {
-    pub key: &'static str,
-    pub display_name: &'static str,
-    pub global_skills_dir: &'static str,
-    pub project_skills_dir: Option<&'static str>,
-    pub detected_if_exists: &'static str,
+    pub key: String,
+    pub display_name: String,
+    pub global_skills_dir: String,
+    pub project_skills_dir: Option<String>,
+    pub detected_if_exists: String,
 }
 
 pub fn builtin_tools() -> Vec<ToolCatalogEntry> {
-    vec![
-        tool(
-            "cursor",
-            "Cursor",
-            ".cursor/skills",
-            Some(".agents/skills"),
-            ".cursor",
-        ),
-        tool(
-            "claude_code",
-            "Claude Code",
-            ".claude/skills",
-            Some(".claude/skills"),
-            ".claude",
-        ),
-        tool(
-            "codex",
-            "Codex",
-            ".codex/skills",
-            Some(".agents/skills"),
-            ".codex",
-        ),
-        tool(
-            "opencode",
-            "OpenCode",
-            ".config/opencode/skills",
-            Some(".agents/skills"),
-            ".config/opencode",
-        ),
-        tool(
-            "antigravity",
-            "Antigravity",
-            ".gemini/antigravity/skills",
-            Some(".agents/skills"),
-            ".gemini/antigravity",
-        ),
-        tool(
-            "amp",
-            "Amp",
-            ".config/agents/skills",
-            Some(".agents/skills"),
-            ".config/agents",
-        ),
-        tool(
-            "kimi_cli",
-            "Kimi Code CLI",
-            ".config/agents/skills",
-            Some(".agents/skills"),
-            ".config/agents",
-        ),
-        tool(
-            "augment",
-            "Augment",
-            ".augment/skills",
-            Some(".augment/skills"),
-            ".augment",
-        ),
-        tool(
-            "openclaw",
-            "OpenClaw",
-            ".openclaw/skills",
-            Some("skills"),
-            ".openclaw",
-        ),
-        tool(
-            "copaw",
-            "Copaw",
-            ".copaw/skill_pool",
-            Some(".copaw/skill_pool"),
-            ".copaw",
-        ),
-        tool(
-            "cline",
-            "Cline",
-            ".agents/skills",
-            Some(".agents/skills"),
-            ".agents",
-        ),
-        tool(
-            "codebuddy",
-            "CodeBuddy",
-            ".codebuddy/skills",
-            Some(".codebuddy/skills"),
-            ".codebuddy",
-        ),
-        tool(
-            "codewhale",
-            "CodeWhale",
-            ".codewhale/skills",
-            Some(".codewhale/skills"),
-            ".codewhale",
-        ),
-        tool(
-            "workbuddy",
-            "WorkBuddy",
-            ".workbuddy/skills",
-            None,
-            ".workbuddy",
-        ),
-        tool(
-            "command_code",
-            "Command Code",
-            ".commandcode/skills",
-            Some(".commandcode/skills"),
-            ".commandcode",
-        ),
-        tool(
-            "continue",
-            "Continue",
-            ".continue/skills",
-            Some(".continue/skills"),
-            ".continue",
-        ),
-        tool(
-            "crush",
-            "Crush",
-            ".config/crush/skills",
-            Some(".crush/skills"),
-            ".config/crush",
-        ),
-        tool(
-            "junie",
-            "Junie",
-            ".junie/skills",
-            Some(".junie/skills"),
-            ".junie",
-        ),
-        tool(
-            "iflow_cli",
-            "iFlow CLI",
-            ".iflow/skills",
-            Some(".iflow/skills"),
-            ".iflow",
-        ),
-        tool(
-            "kiro_cli",
-            "Kiro CLI",
-            ".kiro/skills",
-            Some(".kiro/skills"),
-            ".kiro",
-        ),
-        tool(
-            "kode",
-            "Kode",
-            ".kode/skills",
-            Some(".kode/skills"),
-            ".kode",
-        ),
-        tool(
-            "mcpjam",
-            "MCPJam",
-            ".mcpjam/skills",
-            Some(".mcpjam/skills"),
-            ".mcpjam",
-        ),
-        tool(
-            "mistral_vibe",
-            "Mistral Vibe",
-            ".vibe/skills",
-            Some(".vibe/skills"),
-            ".vibe",
-        ),
-        tool("mux", "Mux", ".mux/skills", Some(".mux/skills"), ".mux"),
-        tool(
-            "openclaude",
-            "OpenClaude IDE",
-            ".openclaude/skills",
-            Some(".openclaude/skills"),
-            ".openclaude",
-        ),
-        tool(
-            "openhands",
-            "OpenHands",
-            ".openhands/skills",
-            Some(".openhands/skills"),
-            ".openhands",
-        ),
-        tool("pi", "Pi", ".pi/agent/skills", Some(".pi/skills"), ".pi"),
-        tool(
-            "qoder",
-            "Qoder",
-            ".qoder/skills",
-            Some(".qoder/skills"),
-            ".qoder",
-        ),
-        tool(
-            "qoderwork",
-            "QoderWork",
-            ".qoderwork/skills",
-            Some(".qoderwork/skills"),
-            ".qoderwork",
-        ),
-        tool(
-            "qwen_code",
-            "Qwen Code",
-            ".qwen/skills",
-            Some(".qwen/skills"),
-            ".qwen",
-        ),
-    ]
+    parse_catalog(include_str!("../agents.toml"))
+        .expect("bundled agents.toml should always parse")
+        .agents
 }
 
-fn tool(
-    key: &'static str,
-    display_name: &'static str,
-    global_skills_dir: &'static str,
-    project_skills_dir: Option<&'static str>,
-    detected_if_exists: &'static str,
-) -> ToolCatalogEntry {
-    ToolCatalogEntry {
-        key,
-        display_name,
-        global_skills_dir,
-        project_skills_dir,
-        detected_if_exists,
+#[derive(Debug, Clone, Deserialize)]
+struct ToolCatalog {
+    agents: Vec<ToolCatalogEntry>,
+}
+
+fn parse_catalog(contents: &str) -> Result<ToolCatalog, toml::de::Error> {
+    toml::from_str(contents)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bundled_catalog_is_editable_toml_and_has_stable_keys() {
+        let tools = builtin_tools();
+
+        assert!(tools.iter().any(|tool| tool.key == "codex"));
+        assert!(tools.iter().any(|tool| tool.key == "claude_code"));
+        assert!(tools.iter().all(|tool| !tool.display_name.is_empty()));
     }
 }

@@ -360,10 +360,10 @@ fn primary_button_style(s: Style) -> Style {
 #[allow(dead_code)]
 fn custom_entry_from_candidate(key: &'static str, name: &'static str) -> ToolCatalogEntry {
     ToolCatalogEntry {
-        key,
-        display_name: name,
-        global_skills_dir: ".agents/skills",
-        project_skills_dir: Some(".agents/skills"),
-        detected_if_exists: ".agents",
+        key: key.to_string(),
+        display_name: name.to_string(),
+        global_skills_dir: ".agents/skills".to_string(),
+        project_skills_dir: Some(".agents/skills".to_string()),
+        detected_if_exists: ".agents".to_string(),
     }
 }

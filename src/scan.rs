@@ -97,9 +97,12 @@ pub fn format_scan_summary(report: &ScanReport) -> String {
 }
 
 fn scan_tool(entry: &ToolCatalogEntry, home_dir: &Path, project_root: &Path) -> ToolScan {
-    let detected_path = home_dir.join(entry.detected_if_exists);
-    let global_skills_dir = home_dir.join(entry.global_skills_dir);
-    let project_skills_dir = entry.project_skills_dir.map(|dir| project_root.join(dir));
+    let detected_path = home_dir.join(&entry.detected_if_exists);
+    let global_skills_dir = home_dir.join(&entry.global_skills_dir);
+    let project_skills_dir = entry
+        .project_skills_dir
+        .as_deref()
+        .map(|dir| project_root.join(dir));
     let detected = detected_path.exists();
 
     let mut found = Vec::new();
@@ -129,8 +132,8 @@ fn scan_tool(entry: &ToolCatalogEntry, home_dir: &Path, project_root: &Path) -> 
     missing.dedup();
 
     ToolScan {
-        key: entry.key.to_string(),
-        display_name: entry.display_name.to_string(),
+        key: entry.key.clone(),
+        display_name: entry.display_name.clone(),
         detected,
         detected_path,
         global_skills_dir,

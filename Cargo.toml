@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 description = "Native Floem and CLI prototype for packing AI coding tool setup folders safely."
 license = "MIT"
-default-run = "my-ai-bag"
+default-run = "aibag"
 
 [lib]
 name = "my_ai_bag"

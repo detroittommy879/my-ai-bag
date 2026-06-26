@@ -5,8 +5,9 @@ My AI Bag is a native Rust/Floem plus CLI experiment. Do not convert it to Tauri
 ## Project Shape
 
 - `src/lib.rs` exposes the shared catalog, scanner, preview, and pack/export logic.
-- `src/bin/aibag.rs` is the CLI.
-- `src/bin/my_ai_bag.rs` is the Floem desktop app.
+- `src/bin/aibag.rs` is the main CLI and owns the stable user-facing workflow.
+- `src/ui.rs` is the Floem desktop app module. Keep UI churn here and call shared library functions for real work.
+- `src/bin/my_ai_bag.rs` is only a compatibility launcher for the UI.
 - `docs/` and `README.md` are user-facing documentation.
 
 ## Safety Rules
@@ -37,7 +38,7 @@ Useful commands:
 
 ```powershell
 cargo test
-cargo run --bin aibag -- scan
-cargo run --bin aibag -- pack --include codex --output test.aibag --passphrase "use a long test passphrase"
-cargo run --bin my-ai-bag
+cargo run -- scan
+cargo run -- pack --include codex --output test.aibag --passphrase "use a long test passphrase"
+cargo run -- ui
 ```

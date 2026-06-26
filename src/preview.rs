@@ -126,7 +126,8 @@ pub fn format_preview(report: &ScanReport, preview: &PackPreview) -> String {
                 lines.push(format!("- {} ({})", tool.display_name, tool.key));
                 for found in &tool.found {
                     lines.push(format!(
-                        "  - {:?}: {} ({} file(s), {} byte(s))",
+                        "  - {} {:?}: {} ({} file(s), {} byte(s))",
+                        found.scope.label(),
                         found.category,
                         found.path.display(),
                         found.file_count,

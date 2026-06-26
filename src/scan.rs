@@ -14,9 +14,25 @@ pub enum Category {
     Mcp,
 }
 
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ScanScope {
+    Home,
+    Project,
+}
+
+impl ScanScope {
+    pub fn label(self) -> &'static str {
+        match self {
+            ScanScope::Home => "home",
+            ScanScope::Project => "project",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct DiscoveredPath {
     pub path: PathBuf,
+    pub scope: ScanScope,
     pub category: Category,
     pub is_dir: bool,
     pub file_count: usize,
@@ -47,6 +63,8 @@ pub struct ScanReport {
 pub struct ScanOptions {
     pub home_dir: PathBuf,
     pub project_root: PathBuf,
+    pub include_home: bool,
+    pub include_project: bool,
     pub catalog: Vec<ToolCatalogEntry>,
 }
 
@@ -55,8 +73,22 @@ impl ScanOptions {
         Self {
             home_dir,
             project_root,
+            include_home: true,
+            include_project: true,
             catalog: builtin_tools(),
         }
+    }
+
+    pub fn home_only(mut self) -> Self {
+        self.include_home = true;
+        self.include_project = false;
+        self
+    }
+
+    pub fn project_only(mut self) -> Self {
+        self.include_home = false;
+        self.include_project = true;
+        self
     }
 }
 
@@ -64,7 +96,15 @@ pub fn scan_tools(options: &ScanOptions) -> ScanReport {
     let tools = options
         .catalog
         .iter()
-        .map(|entry| scan_tool(entry, &options.home_dir, &options.project_root))
+        .map(|entry| {
+            scan_tool(
+                entry,
+                &options.home_dir,
+                &options.project_root,
+                options.include_home,
+                options.include_project,
+            )
+        })
         .collect();
 
     ScanReport {
@@ -87,39 +127,85 @@ pub fn format_scan_summary(report: &ScanReport) -> String {
     for tool in &report.tools {
         let status = if tool.detected { "detected" } else { "missing" };
         let found_count = tool.found.len();
+        let scopes = tool
+            .found
+            .iter()
+            .map(|found| found.scope.label())
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect::<Vec<_>>()
+            .join(", ");
+        let scopes = if scopes.is_empty() {
+            "none found".to_string()
+        } else {
+            scopes
+        };
         lines.push(format!(
-            "- {} ({}) - {} item(s)",
-            tool.display_name, status, found_count
+            "- {} ({}) - {} item(s), {}",
+            tool.display_name, status, found_count, scopes
         ));
     }
 
     lines.join("\n")
 }
 
-fn scan_tool(entry: &ToolCatalogEntry, home_dir: &Path, project_root: &Path) -> ToolScan {
-    let detected_path = home_dir.join(&entry.detected_if_exists);
+fn scan_tool(
+    entry: &ToolCatalogEntry,
+    home_dir: &Path,
+    project_root: &Path,
+    include_home: bool,
+    include_project: bool,
+) -> ToolScan {
+    let default_detected_path = home_dir.join(&entry.detected_if_exists);
     let global_skills_dir = home_dir.join(&entry.global_skills_dir);
     let project_skills_dir = entry
         .project_skills_dir
         .as_deref()
         .map(|dir| project_root.join(dir));
-    let detected = detected_path.exists();
 
     let mut found = Vec::new();
     let mut missing = Vec::new();
     let mut notes = Vec::new();
 
-    push_skill_dir(&mut found, &mut missing, &global_skills_dir);
-    if let Some(project_skills_dir) = &project_skills_dir {
-        push_skill_dir(&mut found, &mut missing, project_skills_dir);
-    } else {
-        notes.push("No project skills directory is known for this tool.".to_string());
+    if include_home {
+        if is_home_agents_path(&entry.detected_if_exists)
+            || is_home_agents_path(&entry.global_skills_dir)
+        {
+            notes.push("Skipped ~/.agents in home scope; .agents is treated as a project folder by default.".to_string());
+        } else {
+            push_skill_dir(
+                &mut found,
+                &mut missing,
+                &global_skills_dir,
+                ScanScope::Home,
+            );
+            let home_detected_path = home_dir.join(&entry.detected_if_exists);
+            if home_detected_path.exists() {
+                collect_config_candidates(&home_detected_path, ScanScope::Home, &mut found);
+            } else {
+                missing.push(home_detected_path);
+            }
+        }
     }
 
-    if detected_path.exists() {
-        collect_config_candidates(&detected_path, &mut found);
-    } else {
-        missing.push(detected_path.clone());
+    if include_project {
+        if let Some(project_skills_dir) = &project_skills_dir {
+            push_skill_dir(
+                &mut found,
+                &mut missing,
+                project_skills_dir,
+                ScanScope::Project,
+            );
+        } else {
+            notes.push("No project skills directory is known for this tool.".to_string());
+        }
+
+        let project_detected_path = project_root.join(&entry.detected_if_exists);
+        if project_detected_path.exists() {
+            collect_config_candidates(&project_detected_path, ScanScope::Project, &mut found);
+        } else {
+            missing.push(project_detected_path);
+        }
     }
 
     found.sort_by(|left, right| {
@@ -134,8 +220,8 @@ fn scan_tool(entry: &ToolCatalogEntry, home_dir: &Path, project_root: &Path) -> 
     ToolScan {
         key: entry.key.clone(),
         display_name: entry.display_name.clone(),
-        detected,
-        detected_path,
+        detected: !found.is_empty(),
+        detected_path: default_detected_path,
         global_skills_dir,
         project_skills_dir,
         found,
@@ -144,11 +230,22 @@ fn scan_tool(entry: &ToolCatalogEntry, home_dir: &Path, project_root: &Path) -> 
     }
 }
 
-fn push_skill_dir(found: &mut Vec<DiscoveredPath>, missing: &mut Vec<PathBuf>, path: &Path) {
+fn is_home_agents_path(path: &str) -> bool {
+    let normalized = path.replace('\\', "/");
+    normalized == ".agents" || normalized.starts_with(".agents/")
+}
+
+fn push_skill_dir(
+    found: &mut Vec<DiscoveredPath>,
+    missing: &mut Vec<PathBuf>,
+    path: &Path,
+    scope: ScanScope,
+) {
     if path.exists() {
         let (file_count, byte_count) = summarize_dir(path, 8);
         found.push(DiscoveredPath {
             path: path.to_path_buf(),
+            scope,
             category: Category::Skill,
             is_dir: true,
             file_count,
@@ -159,7 +256,7 @@ fn push_skill_dir(found: &mut Vec<DiscoveredPath>, missing: &mut Vec<PathBuf>, p
     }
 }
 
-fn collect_config_candidates(root: &Path, found: &mut Vec<DiscoveredPath>) {
+fn collect_config_candidates(root: &Path, scope: ScanScope, found: &mut Vec<DiscoveredPath>) {
     let mut seen = BTreeSet::new();
     visit_limited(root, 0, 3, &mut |path, is_dir| {
         if path == root {
@@ -196,6 +293,7 @@ fn collect_config_candidates(root: &Path, found: &mut Vec<DiscoveredPath>) {
                 };
                 found.push(DiscoveredPath {
                     path: path.to_path_buf(),
+                    scope,
                     category,
                     is_dir,
                     file_count,
@@ -355,5 +453,74 @@ mod tests {
 
         let summary = format_scan_summary(&report);
         assert!(!summary.contains("sk-test-secret"));
+    }
+
+    #[test]
+    fn default_scan_ignores_home_agents_but_includes_project_agents() {
+        let temp = tempfile::tempdir().unwrap();
+        let home = temp.path().join("home");
+        let project = temp.path().join("project");
+        fs::create_dir_all(home.join(".agents/skills/accidental")).unwrap();
+        fs::write(
+            home.join(".agents/skills/accidental/SKILL.md"),
+            "do not include home agents by default",
+        )
+        .unwrap();
+        fs::create_dir_all(project.join(".agents/skills/team")).unwrap();
+        fs::write(project.join(".agents/skills/team/SKILL.md"), "team skill").unwrap();
+
+        let report = scan_tools(&ScanOptions::new(home, project));
+        let cline = report
+            .tools
+            .iter()
+            .find(|tool| tool.key == "cline")
+            .unwrap();
+
+        assert!(cline.detected);
+        assert!(
+            cline
+                .found
+                .iter()
+                .any(|item| item.scope == ScanScope::Project
+                    && item.path.ends_with(".agents/skills"))
+        );
+        assert!(
+            !cline
+                .found
+                .iter()
+                .any(|item| item.scope == ScanScope::Home && item.path.ends_with(".agents/skills"))
+        );
+        assert!(
+            cline
+                .notes
+                .iter()
+                .any(|note| note.contains("Skipped ~/.agents"))
+        );
+    }
+
+    #[test]
+    fn project_only_scan_finds_agent_specific_project_root() {
+        let temp = tempfile::tempdir().unwrap();
+        let home = temp.path().join("home");
+        let project = temp.path().join("project");
+        fs::create_dir_all(project.join(".codex")).unwrap();
+        fs::write(project.join(".codex/settings.json"), "{\"project\":true}").unwrap();
+
+        let report = scan_tools(&ScanOptions::new(home, project).project_only());
+        let codex = report
+            .tools
+            .iter()
+            .find(|tool| tool.key == "codex")
+            .unwrap();
+
+        assert!(codex.detected);
+        assert!(
+            codex
+                .found
+                .iter()
+                .any(|item| item.scope == ScanScope::Project
+                    && item.category == Category::Setting
+                    && item.path.ends_with(".codex/settings.json"))
+        );
     }
 }

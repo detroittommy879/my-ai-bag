@@ -9,7 +9,7 @@ My AI Bag should feel like one small Rust app named `aibag`, not a pile of separ
 - `aibag pack` should support headless packing for scripts, VMs, and fresh machines.
 - `aibag help` should explain the same workflow without requiring users to understand the implementation split.
 
-The current two-binary shape (`aibag` plus `my-ai-bag`) was useful for the prototype, but the next product slice should collapse this into one user-facing command.
+The original two-binary prototype (`aibag` plus `my-ai-bag`) was useful, but the product direction is now CLI-first with `aibag ui` as the optional UI entry point. The old `my-ai-bag` binary can remain temporarily as a compatibility launcher.
 
 ## Scan Model
 
@@ -90,16 +90,16 @@ I did a quick web scan for similar tools and patterns on June 26, 2026.
 ## Near-Term Implementation Slices
 
 1. Collapse to one user-facing binary.
-   Keep one `aibag` command and move the Floem UI behind `aibag ui`.
+   Keep one `aibag` command and move the Floem UI behind `aibag ui`. Initial support is implemented; later we can remove the compatibility `my-ai-bag` binary.
 
 2. Add scan scopes.
-   Model home/project/extra sources explicitly. Default to both home and current project. Ignore home `.agents` unless explicitly requested.
+   Model home/project/extra sources explicitly. Default to both home and current project. Ignore home `.agents` unless explicitly requested. Initial home/project/both support is implemented.
 
 3. Upgrade catalog schema.
    Move from one skills path and one detection path to category-specific home/project paths.
 
 4. Add per-item selection.
-   UI should let users choose agent/category/path before `Pack Bag`. CLI should support flags like `--include codex:skills,codex:mcp`.
+   UI should let users choose agent/category/path before `Pack Bag`. CLI supports first-pass category filters like `--include codex:skills,codex:mcp`; path-level selection is still pending.
 
 5. Add restore planning before restore implementation.
    Restore is riskier than pack. It needs dry-run, conflict handling, backups of overwritten files, and clear mapping from archive paths to destination paths.

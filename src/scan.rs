@@ -12,6 +12,7 @@ pub enum Category {
     Setting,
     Auth,
     Mcp,
+    AgentFolder,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -39,6 +40,14 @@ pub struct DiscoveredPath {
     pub byte_count: u64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AgentRoot {
+    pub path: PathBuf,
+    pub scope: ScanScope,
+    pub file_count: usize,
+    pub byte_count: u64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolScan {
     pub key: String,
@@ -47,6 +56,7 @@ pub struct ToolScan {
     pub detected_path: PathBuf,
     pub global_skills_dir: PathBuf,
     pub project_skills_dir: Option<PathBuf>,
+    pub roots: Vec<AgentRoot>,
     pub found: Vec<DiscoveredPath>,
     pub missing: Vec<PathBuf>,
     pub notes: Vec<String>,
@@ -164,6 +174,7 @@ fn scan_tool(
         .map(|dir| project_root.join(dir));
 
     let mut found = Vec::new();
+    let mut roots = Vec::new();
     let mut missing = Vec::new();
     let mut notes = Vec::new();
 
@@ -179,11 +190,14 @@ fn scan_tool(
                 &global_skills_dir,
                 ScanScope::Home,
             );
-            let home_detected_path = home_dir.join(&entry.detected_if_exists);
-            if home_detected_path.exists() {
-                collect_config_candidates(&home_detected_path, ScanScope::Home, &mut found);
-            } else {
-                missing.push(home_detected_path);
+            for relative in entry.effective_home_roots() {
+                let home_root = home_dir.join(relative);
+                if home_root.exists() {
+                    push_agent_root(&mut roots, &home_root, ScanScope::Home);
+                    collect_config_candidates(&home_root, ScanScope::Home, &mut found);
+                } else {
+                    missing.push(home_root);
+                }
             }
         }
     }
@@ -200,11 +214,14 @@ fn scan_tool(
             notes.push("No project skills directory is known for this tool.".to_string());
         }
 
-        let project_detected_path = project_root.join(&entry.detected_if_exists);
-        if project_detected_path.exists() {
-            collect_config_candidates(&project_detected_path, ScanScope::Project, &mut found);
-        } else {
-            missing.push(project_detected_path);
+        for relative in entry.effective_project_roots() {
+            let project_agent_root = project_root.join(relative);
+            if project_agent_root.exists() {
+                push_agent_root(&mut roots, &project_agent_root, ScanScope::Project);
+                collect_config_candidates(&project_agent_root, ScanScope::Project, &mut found);
+            } else {
+                missing.push(project_agent_root);
+            }
         }
     }
 
@@ -216,18 +233,35 @@ fn scan_tool(
     found.dedup_by(|left, right| left.path == right.path && left.category == right.category);
     missing.sort();
     missing.dedup();
+    roots.sort_by(|left, right| {
+        left.path
+            .cmp(&right.path)
+            .then(left.scope.cmp(&right.scope))
+    });
+    roots.dedup_by(|left, right| left.path == right.path && left.scope == right.scope);
 
     ToolScan {
         key: entry.key.clone(),
         display_name: entry.display_name.clone(),
-        detected: !found.is_empty(),
+        detected: !found.is_empty() || !roots.is_empty(),
         detected_path: default_detected_path,
         global_skills_dir,
         project_skills_dir,
+        roots,
         found,
         missing,
         notes,
     }
+}
+
+fn push_agent_root(roots: &mut Vec<AgentRoot>, path: &Path, scope: ScanScope) {
+    let (file_count, byte_count) = summarize_dir(path, 12);
+    roots.push(AgentRoot {
+        path: path.to_path_buf(),
+        scope,
+        file_count,
+        byte_count,
+    });
 }
 
 fn is_home_agents_path(path: &str) -> bool {
@@ -374,6 +408,12 @@ pub fn visit_limited(
     max_depth: usize,
     visitor: &mut impl FnMut(&Path, bool),
 ) {
+    if fs::symlink_metadata(path)
+        .map(|metadata| metadata.file_type().is_symlink())
+        .unwrap_or(false)
+    {
+        return;
+    }
     let is_dir = path.is_dir();
     visitor(path, is_dir);
     if !is_dir || depth >= max_depth {

@@ -1,8 +1,10 @@
 use anyhow::{Context, Result};
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{Args, Parser, Subcommand, ValueEnum};
 use my_ai_bag::{
-    Category, PackOptions, ScanOptions, ScanReport, builtin_tools, format_preview,
-    format_scan_summary, pack_selected_tools, preview_for_selection, scan_tools,
+    Category, PackMode, PackOptions, ScanOptions, ScanReport, builtin_tools, discover_credentials,
+    discover_skills, format_credential_preview, format_preview, format_scan_summary,
+    format_skill_library, pack_selected_tools, preview_for_selection_with_mode, scan_tools,
+    write_credential_vault, write_skill_library,
 };
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -22,20 +24,32 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
+    /// Scan known home and project paths without reading file contents.
     Scan(CommonArgs),
+    /// Preview or write an encrypted selective/whole-folder bag.
     Pack(PackArgs),
+    /// Find API credentials and model references; values stay redacted unless encrypted.
+    Credentials(CredentialArgs),
+    /// Find, deduplicate, and optionally collect SKILL.md packages.
+    Skills(SkillArgs),
+    /// List the built-in coding-agent catalog.
     Tools,
+    /// Open the optional native Floem interface.
     Ui,
 }
 
-#[derive(Debug, Parser)]
+#[derive(Debug, Args)]
 struct CommonArgs {
+    /// Project directory to inspect instead of the current directory.
     #[arg(long)]
     project_root: Option<PathBuf>,
+    /// Home directory to inspect instead of the current user's home.
     #[arg(long)]
     home: Option<PathBuf>,
+    /// Inspect home paths, project paths, or both.
     #[arg(long, value_enum, default_value_t = ScopeArg::Both)]
     scope: ScopeArg,
+    /// Print a machine-readable preview. Secret values remain redacted.
     #[arg(long)]
     json: bool,
 }
@@ -48,16 +62,54 @@ struct PackArgs {
     home: Option<PathBuf>,
     #[arg(long, value_enum, default_value_t = ScopeArg::Both)]
     scope: ScopeArg,
+    /// Comma-separated tools or tool:category filters.
     #[arg(long, value_delimiter = ',')]
     include: Vec<String>,
+    /// Pack recognized items or complete detected agent folders.
+    #[arg(long, value_enum, default_value_t = PackModeArg::Selective)]
+    mode: PackModeArg,
+    /// Select every catalog tool, including tools with no detected files.
     #[arg(long)]
     all: bool,
+    /// Write an encrypted .aibag file; omit for preview only.
     #[arg(long)]
     output: Option<PathBuf>,
+    /// Encryption passphrase (AIBAG_PASSPHRASE is safer for shell history).
     #[arg(long)]
     passphrase: Option<String>,
     #[arg(long)]
     json: bool,
+}
+
+#[derive(Debug, Args)]
+struct CredentialArgs {
+    #[command(flatten)]
+    common: CommonArgs,
+    /// Comma-separated tool keys; defaults to detected tools.
+    #[arg(long, value_delimiter = ',')]
+    include: Vec<String>,
+    #[arg(long)]
+    all: bool,
+    /// Write an encrypted credential/model vault; omit for redacted preview only.
+    #[arg(long)]
+    output: Option<PathBuf>,
+    /// Encryption passphrase (AIBAG_PASSPHRASE is safer for shell history).
+    #[arg(long)]
+    passphrase: Option<String>,
+}
+
+#[derive(Debug, Args)]
+struct SkillArgs {
+    #[command(flatten)]
+    common: CommonArgs,
+    /// Comma-separated tool keys; defaults to detected tools.
+    #[arg(long, value_delimiter = ',')]
+    include: Vec<String>,
+    #[arg(long)]
+    all: bool,
+    /// Plaintext central skills directory; omit for preview only.
+    #[arg(long)]
+    store: Option<PathBuf>,
 }
 
 #[derive(Debug, Clone, Copy, ValueEnum)]
@@ -65,6 +117,21 @@ enum ScopeArg {
     Home,
     Project,
     Both,
+}
+
+#[derive(Debug, Clone, Copy, ValueEnum)]
+enum PackModeArg {
+    Selective,
+    Folders,
+}
+
+impl From<PackModeArg> for PackMode {
+    fn from(value: PackModeArg) -> Self {
+        match value {
+            PackModeArg::Selective => PackMode::Selective,
+            PackModeArg::Folders => PackMode::AgentFolders,
+        }
+    }
 }
 
 fn main() -> Result<()> {
@@ -82,6 +149,8 @@ fn main() -> Result<()> {
     })) {
         Command::Scan(args) => scan(args),
         Command::Pack(args) => pack(args),
+        Command::Credentials(args) => credentials(args),
+        Command::Skills(args) => skills(args),
         Command::Tools => tools(),
         Command::Ui => {
             my_ai_bag::ui::launch_ui();
@@ -101,10 +170,20 @@ fn scan(args: CommonArgs) -> Result<()> {
 }
 
 fn pack(args: PackArgs) -> Result<()> {
+    let mode = PackMode::from(args.mode);
+    if mode == PackMode::AgentFolders && args.include.iter().any(|item| item.contains(':')) {
+        anyhow::bail!(
+            "folder mode accepts whole-tool filters such as --include codex, not category filters"
+        );
+    }
     let report = scan_tools(&scan_options(args.home, args.project_root, args.scope)?);
-    let report = filter_report_for_includes(report, &args.include)?;
+    let report = if mode == PackMode::Selective {
+        filter_report_for_includes(report, &args.include)?
+    } else {
+        report
+    };
     let selected = selected_tools(&report, &args.include, args.all);
-    let preview = preview_for_selection(&report, &selected);
+    let preview = preview_for_selection_with_mode(&report, &selected, mode);
 
     if args.json {
         println!("{}", serde_json::to_string_pretty(&preview)?);
@@ -129,6 +208,7 @@ fn pack(args: PackArgs) -> Result<()> {
         &report,
         &PackOptions {
             selected_keys: selected,
+            mode,
             output: output.clone(),
             passphrase,
         },
@@ -138,6 +218,82 @@ fn pack(args: PackArgs) -> Result<()> {
         output.display(),
         archive.files.len()
     );
+    Ok(())
+}
+
+fn credentials(args: CredentialArgs) -> Result<()> {
+    reject_category_filters(&args.include, "credentials")?;
+    let report = scan_tools(&scan_options(
+        args.common.home,
+        args.common.project_root,
+        args.common.scope,
+    )?);
+    let selected = selected_tools(&report, &args.include, args.all);
+    let inventory = discover_credentials(&report, &selected);
+
+    if args.common.json {
+        println!("{}", serde_json::to_string_pretty(&inventory.preview)?);
+    } else {
+        println!("{}", format_credential_preview(&inventory.preview));
+    }
+
+    let Some(output) = args.output else {
+        eprintln!();
+        eprintln!(
+            "Preview only. Add --output credentials.aibag and --passphrase or AIBAG_PASSPHRASE to write an encrypted vault."
+        );
+        return Ok(());
+    };
+    let passphrase = args
+        .passphrase
+        .or_else(|| env::var("AIBAG_PASSPHRASE").ok())
+        .context("credential export requires --passphrase or AIBAG_PASSPHRASE")?;
+    write_credential_vault(&inventory.vault, &output, &passphrase)?;
+    eprintln!(
+        "Wrote encrypted credential vault to {} with {} credential field(s) and {} model reference(s).",
+        output.display(),
+        inventory.vault.credentials.len(),
+        inventory.vault.models.len()
+    );
+    Ok(())
+}
+
+fn skills(args: SkillArgs) -> Result<()> {
+    reject_category_filters(&args.include, "skills")?;
+    let report = scan_tools(&scan_options(
+        args.common.home,
+        args.common.project_root,
+        args.common.scope,
+    )?);
+    let selected = selected_tools(&report, &args.include, args.all);
+    let library = discover_skills(&report, &selected)?;
+
+    if args.common.json {
+        println!("{}", serde_json::to_string_pretty(&library)?);
+    } else {
+        println!("{}", format_skill_library(&library));
+    }
+
+    if let Some(store) = args.store {
+        write_skill_library(&library, &store)?;
+        eprintln!(
+            "Wrote {} unique skill package(s) to {}.",
+            library.packages.len(),
+            store.display()
+        );
+    } else {
+        eprintln!();
+        eprintln!("Preview only. Add --store PATH to create or update a central skill library.");
+    }
+    Ok(())
+}
+
+fn reject_category_filters(include: &[String], command: &str) -> Result<()> {
+    if include.iter().any(|item| item.contains(':')) {
+        anyhow::bail!(
+            "{command} accepts whole-tool filters such as --include codex, not category filters"
+        );
+    }
     Ok(())
 }
 
@@ -220,6 +376,7 @@ mod tests {
                 detected_path: PathBuf::from("home/.codex"),
                 global_skills_dir: PathBuf::from("home/.codex/skills"),
                 project_skills_dir: Some(PathBuf::from("project/.agents/skills")),
+                roots: Vec::new(),
                 found: vec![
                     discovered("home/.codex/skills", Category::Skill),
                     discovered("home/.codex/auth.json", Category::Auth),

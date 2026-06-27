@@ -7,6 +7,8 @@ My AI Bag should feel like one small Rust app named `aibag`, not a pile of separ
 - `aibag` with no arguments should scan the likely places and show an actionable summary.
 - `aibag ui` should open the Floem app.
 - `aibag pack` should support headless packing for scripts, VMs, and fresh machines.
+- `aibag credentials` should normalize API keys and model references into a local encrypted vault.
+- `aibag skills` should provide one deduplicated local skill library.
 - `aibag help` should explain the same workflow without requiring users to understand the implementation split.
 
 The original two-binary prototype (`aibag` plus `my-ai-bag`) was useful, but the product direction is now CLI-first with `aibag ui` as the optional UI entry point. The old `my-ai-bag` binary can remain temporarily as a compatibility launcher.
@@ -36,6 +38,13 @@ aibag ui              # open native Floem UI
 
 ## Packing UX
 
+Two packing modes now exist:
+
+- `selective` includes recognized skills, settings, MCP, and auth paths.
+- `folders` includes every regular file under selected known agent roots and is the simplest migration experiment.
+
+Complete-folder archives preserve `home/...` and `project/...` namespaces for future cross-OS restore mapping. Symbolic links are skipped. Restore is still pending.
+
 Packing should be selectable at three levels:
 
 - Source scope: home, project, or both.
@@ -59,6 +68,25 @@ extra/<label>/...
 The agent list should be easy to review in pull requests. It should not live only in Rust code and it should not be JSON.
 
 Current step: the built-in catalog now lives in `agents.toml`.
+
+The current catalog can optionally declare `home_roots` and `project_roots` for complete-folder mode. If omitted, roots are derived from the existing detection and skills paths.
+
+## Credentials And Models
+
+The first inventory mode is implemented as `aibag credentials`:
+
+- Reads supported JSON, TOML, YAML, and `.env` files only under known selected agent roots.
+- Finds common API key/token fields and model/model-list fields.
+- Prints and serializes only a redacted preview.
+- Stores real credential values only in memory and in an explicitly requested encrypted `.aibag` vault.
+
+The internal schema records tool, source path, field path, provider hint, value kind, and value. This gives a future injector enough provenance to map one provider credential/model into another agent's schema. Injection is deliberately not implemented until conflict handling, schema adapters, and backups exist.
+
+## Central Skills
+
+`aibag skills` now discovers folders containing `SKILL.md`, hashes their complete contents, and merges identical copies found under multiple agents. `--store PATH` writes a content-addressed plaintext library and `index.json`.
+
+Future work: reviewed install adapters, per-agent enable/disable state, conflict handling for same-name/different-content skills, and trust/signature metadata. Scripts in collected skills are not sandboxed.
 
 Next schema should probably grow from this:
 
@@ -96,7 +124,7 @@ I did a quick web scan for similar tools and patterns on June 26, 2026.
    Model home/project/extra sources explicitly. Default to both home and current project. Ignore home `.agents` unless explicitly requested. Initial home/project/both support is implemented.
 
 3. Upgrade catalog schema.
-   Move from one skills path and one detection path to category-specific home/project paths.
+   Optional whole-folder roots are implemented. Still move from one skills path and one detection path to category-specific home/project paths.
 
 4. Add per-item selection.
    UI should let users choose agent/category/path before `Pack Bag`. CLI supports first-pass category filters like `--include codex:skills,codex:mcp`; path-level selection is still pending.
@@ -106,3 +134,6 @@ I did a quick web scan for similar tools and patterns on June 26, 2026.
 
 6. Decide sync later.
    Keep sync out of the default prototype. If added, make it explicit and probably backed by local encrypted archives first, not direct cloud upload.
+
+7. Add credential and skill adapters.
+   Build reviewed, tool-specific import/injection adapters on top of the encrypted credential vault and central skill index. Every write needs dry-run output and a backup of the destination file first.

@@ -7,6 +7,39 @@ pub struct ToolCatalogEntry {
     pub global_skills_dir: String,
     pub project_skills_dir: Option<String>,
     pub detected_if_exists: String,
+    #[serde(default)]
+    pub home_roots: Vec<String>,
+    #[serde(default)]
+    pub project_roots: Vec<String>,
+}
+
+impl ToolCatalogEntry {
+    pub fn effective_home_roots(&self) -> Vec<String> {
+        if self.home_roots.is_empty() {
+            vec![self.detected_if_exists.clone()]
+        } else {
+            self.home_roots.clone()
+        }
+    }
+
+    pub fn effective_project_roots(&self) -> Vec<String> {
+        if !self.project_roots.is_empty() {
+            return self.project_roots.clone();
+        }
+
+        let mut roots = vec![self.detected_if_exists.clone()];
+        if let Some(skills) = &self.project_skills_dir {
+            let normalized = skills.replace('\\', "/");
+            if let Some(root) = normalized.split('/').next()
+                && !root.is_empty()
+            {
+                roots.push(root.to_string());
+            }
+        }
+        roots.sort();
+        roots.dedup();
+        roots
+    }
 }
 
 pub fn builtin_tools() -> Vec<ToolCatalogEntry> {

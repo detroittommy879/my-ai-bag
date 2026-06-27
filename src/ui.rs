@@ -367,5 +367,7 @@ fn custom_entry_from_candidate(key: &'static str, name: &'static str) -> ToolCat
         global_skills_dir: ".agents/skills".to_string(),
         project_skills_dir: Some(".agents/skills".to_string()),
         detected_if_exists: ".agents".to_string(),
+        home_roots: Vec::new(),
+        project_roots: Vec::new(),
     }
 }

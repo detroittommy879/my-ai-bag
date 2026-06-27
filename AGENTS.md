@@ -4,7 +4,7 @@ My AI Bag is a native Rust/Floem plus CLI experiment. Do not convert it to Tauri
 
 ## Project Shape
 
-- `src/lib.rs` exposes the shared catalog, scanner, preview, and pack/export logic.
+- `src/lib.rs` exposes the shared catalog, scanner, preview, pack/export, credential inventory, and skills-library logic.
 - `src/bin/aibag.rs` is the main CLI and owns the stable user-facing workflow.
 - `src/ui.rs` is the Floem desktop app module. Keep UI churn here and call shared library functions for real work.
 - `src/bin/my_ai_bag.rs` is only a compatibility launcher for the UI.
@@ -17,6 +17,8 @@ My AI Bag is a native Rust/Floem plus CLI experiment. Do not convert it to Tauri
 - Do not display auth/config contents in the UI.
 - Preview output may show paths, categories, file counts, and byte counts.
 - Encrypted export may include auth/config bytes, but only after an explicit local `pack --output` action and passphrase.
+- Credential preview and `--json` output must use redacted types. Real key values may only exist in memory and encrypted vault payloads.
+- Whole-folder packing and skill collection skip symbolic links instead of following them outside known roots.
 
 ## Documentation Maintenance
 
@@ -40,5 +42,8 @@ Useful commands:
 cargo test
 cargo run -- scan
 cargo run -- pack --include codex --output test.aibag --passphrase "use a long test passphrase"
+cargo run -- pack --mode folders --include codex
+cargo run -- credentials --include codex
+cargo run -- skills --include codex
 cargo run -- ui
 ```

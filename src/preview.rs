@@ -1,4 +1,7 @@
-use crate::scan::{Category, ScanReport};
+use crate::{
+    pack::PackMode,
+    scan::{Category, ScanReport},
+};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -7,6 +10,7 @@ use std::{
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PackPreview {
+    pub mode: PackMode,
     pub selected_tools: Vec<String>,
     pub detected_tools: Vec<String>,
     pub unique_folders_to_include: Vec<PathBuf>,
@@ -22,6 +26,14 @@ pub struct DuplicateFolder {
 }
 
 pub fn preview_for_selection(report: &ScanReport, selected_keys: &[String]) -> PackPreview {
+    preview_for_selection_with_mode(report, selected_keys, PackMode::Selective)
+}
+
+pub fn preview_for_selection_with_mode(
+    report: &ScanReport,
+    selected_keys: &[String],
+    mode: PackMode,
+) -> PackPreview {
     let selected: BTreeSet<&str> = selected_keys.iter().map(String::as_str).collect();
     let mut detected_tools = Vec::new();
     let mut unique_folders_to_include = BTreeSet::new();
@@ -42,19 +54,32 @@ pub fn preview_for_selection(report: &ScanReport, selected_keys: &[String]) -> P
             continue;
         }
 
-        for found in &tool.found {
-            if found.is_dir {
-                unique_folders_to_include.insert(found.path.clone());
-                folder_owners
-                    .entry(found.path.clone())
-                    .or_default()
-                    .insert(tool.display_name.clone());
-            } else if let Some(parent) = found.path.parent() {
-                unique_folders_to_include.insert(parent.to_path_buf());
-                folder_owners
-                    .entry(parent.to_path_buf())
-                    .or_default()
-                    .insert(tool.display_name.clone());
+        match mode {
+            PackMode::Selective => {
+                for found in &tool.found {
+                    if found.is_dir {
+                        unique_folders_to_include.insert(found.path.clone());
+                        folder_owners
+                            .entry(found.path.clone())
+                            .or_default()
+                            .insert(tool.display_name.clone());
+                    } else if let Some(parent) = found.path.parent() {
+                        unique_folders_to_include.insert(parent.to_path_buf());
+                        folder_owners
+                            .entry(parent.to_path_buf())
+                            .or_default()
+                            .insert(tool.display_name.clone());
+                    }
+                }
+            }
+            PackMode::AgentFolders => {
+                for root in &tool.roots {
+                    unique_folders_to_include.insert(root.path.clone());
+                    folder_owners
+                        .entry(root.path.clone())
+                        .or_default()
+                        .insert(tool.display_name.clone());
+                }
             }
         }
 
@@ -87,6 +112,7 @@ pub fn preview_for_selection(report: &ScanReport, selected_keys: &[String]) -> P
         .collect();
 
     PackPreview {
+        mode,
         selected_tools: selected_keys.to_vec(),
         detected_tools,
         unique_folders_to_include: unique_folders_to_include.into_iter().collect(),
@@ -99,6 +125,7 @@ pub fn preview_for_selection(report: &ScanReport, selected_keys: &[String]) -> P
 pub fn format_preview(report: &ScanReport, preview: &PackPreview) -> String {
     let mut lines = vec![
         "My AI Bag pack preview".to_string(),
+        format!("Mode: {}", preview.mode.label()),
         format!("Home: {}", report.home_dir.display()),
         format!("Project root: {}", report.project_root.display()),
         String::new(),
@@ -124,15 +151,27 @@ pub fn format_preview(report: &ScanReport, preview: &PackPreview) -> String {
         for key in &preview.selected_tools {
             if let Some(tool) = report.tools.iter().find(|tool| &tool.key == key) {
                 lines.push(format!("- {} ({})", tool.display_name, tool.key));
-                for found in &tool.found {
-                    lines.push(format!(
-                        "  - {} {:?}: {} ({} file(s), {} byte(s))",
-                        found.scope.label(),
-                        found.category,
-                        found.path.display(),
-                        found.file_count,
-                        found.byte_count
-                    ));
+                if preview.mode == PackMode::AgentFolders {
+                    for root in &tool.roots {
+                        lines.push(format!(
+                            "  - {} folder: {} ({} file(s), {} byte(s))",
+                            root.scope.label(),
+                            root.path.display(),
+                            root.file_count,
+                            root.byte_count
+                        ));
+                    }
+                } else {
+                    for found in &tool.found {
+                        lines.push(format!(
+                            "  - {} {:?}: {} ({} file(s), {} byte(s))",
+                            found.scope.label(),
+                            found.category,
+                            found.path.display(),
+                            found.file_count,
+                            found.byte_count
+                        ));
+                    }
                 }
             }
         }
@@ -181,6 +220,7 @@ pub fn category_label(category: Category) -> &'static str {
         Category::Setting => "settings",
         Category::Auth => "auth",
         Category::Mcp => "mcp",
+        Category::AgentFolder => "agent folder",
     }
 }
 

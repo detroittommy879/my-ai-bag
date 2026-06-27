@@ -1,5 +1,5 @@
 use crate::{
-    preview::preview_for_selection,
+    preview::preview_for_selection_with_mode,
     scan::{Category, ScanReport, visit_limited},
 };
 use anyhow::{Context, Result, anyhow};
@@ -20,8 +20,25 @@ use std::{
 #[derive(Debug, Clone)]
 pub struct PackOptions {
     pub selected_keys: Vec<String>,
+    pub mode: PackMode,
     pub output: PathBuf,
     pub passphrase: String,
+}
+
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub enum PackMode {
+    #[default]
+    Selective,
+    AgentFolders,
+}
+
+impl PackMode {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Selective => "selective",
+            Self::AgentFolders => "folders",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,6 +48,8 @@ pub struct BagArchive {
     pub home_dir: PathBuf,
     pub project_root: PathBuf,
     pub selected_tools: Vec<String>,
+    #[serde(default)]
+    pub mode: PackMode,
     pub files: Vec<BagFile>,
 }
 
@@ -58,7 +77,7 @@ pub fn pack_selected_tools(report: &ScanReport, options: &PackOptions) -> Result
         return Err(anyhow!("passphrase must be at least 12 characters"));
     }
 
-    let archive = build_archive(report, &options.selected_keys)?;
+    let archive = build_archive(report, &options.selected_keys, options.mode)?;
     let payload = serde_json::to_vec_pretty(&archive)?;
     let encrypted = encrypt_payload(&payload, &options.passphrase)?;
     fs::write(&options.output, encrypted)
@@ -68,20 +87,16 @@ pub fn pack_selected_tools(report: &ScanReport, options: &PackOptions) -> Result
 }
 
 pub fn decrypt_archive_bytes(encrypted: &[u8], passphrase: &str) -> Result<BagArchive> {
-    let envelope: EncryptedEnvelope = serde_json::from_slice(encrypted)?;
-    let salt = STANDARD.decode(envelope.salt_base64)?;
-    let nonce = STANDARD.decode(envelope.nonce_base64)?;
-    let payload = STANDARD.decode(envelope.payload_base64)?;
-    let key = derive_key(passphrase, &salt)?;
-    let cipher = XChaCha20Poly1305::new(Key::from_slice(&key));
-    let decrypted = cipher
-        .decrypt(XNonce::from_slice(&nonce), payload.as_ref())
-        .map_err(|_| anyhow!("failed to decrypt archive with the supplied passphrase"))?;
-
-    Ok(serde_json::from_slice(&decrypted)?)
+    Ok(serde_json::from_slice(&decrypt_payload(
+        encrypted, passphrase,
+    )?)?)
 }
 
-fn build_archive(report: &ScanReport, selected_keys: &[String]) -> Result<BagArchive> {
+fn build_archive(
+    report: &ScanReport,
+    selected_keys: &[String],
+    mode: PackMode,
+) -> Result<BagArchive> {
     let selected: BTreeSet<&str> = selected_keys.iter().map(String::as_str).collect();
     let mut seen_files = BTreeSet::new();
     let mut files = Vec::new();
@@ -91,30 +106,46 @@ fn build_archive(report: &ScanReport, selected_keys: &[String]) -> Result<BagArc
         .iter()
         .filter(|tool| selected.contains(tool.key.as_str()))
     {
-        for found in &tool.found {
-            if found.is_dir {
-                collect_files_from_dir(
-                    &found.path,
-                    found.category,
-                    &report.home_dir,
-                    &report.project_root,
-                    &mut seen_files,
-                    &mut files,
-                )?;
-            } else {
-                push_file(
-                    &found.path,
-                    found.category,
-                    &report.home_dir,
-                    &report.project_root,
-                    &mut seen_files,
-                    &mut files,
-                )?;
+        match mode {
+            PackMode::Selective => {
+                for found in &tool.found {
+                    if found.is_dir {
+                        collect_files_from_dir(
+                            &found.path,
+                            found.category,
+                            &report.home_dir,
+                            &report.project_root,
+                            &mut seen_files,
+                            &mut files,
+                        )?;
+                    } else {
+                        push_file(
+                            &found.path,
+                            found.category,
+                            &report.home_dir,
+                            &report.project_root,
+                            &mut seen_files,
+                            &mut files,
+                        )?;
+                    }
+                }
+            }
+            PackMode::AgentFolders => {
+                for root in &tool.roots {
+                    collect_files_from_dir(
+                        &root.path,
+                        Category::AgentFolder,
+                        &report.home_dir,
+                        &report.project_root,
+                        &mut seen_files,
+                        &mut files,
+                    )?;
+                }
             }
         }
     }
 
-    let preview = preview_for_selection(report, selected_keys);
+    let preview = preview_for_selection_with_mode(report, selected_keys, mode);
     if preview.unique_folders_to_include.is_empty() && files.is_empty() {
         return Err(anyhow!("nothing was found to pack for the selected tools"));
     }
@@ -125,6 +156,7 @@ fn build_archive(report: &ScanReport, selected_keys: &[String]) -> Result<BagArc
         home_dir: report.home_dir.clone(),
         project_root: report.project_root.clone(),
         selected_tools: selected_keys.to_vec(),
+        mode,
         files,
     })
 }
@@ -137,11 +169,16 @@ fn collect_files_from_dir(
     seen_files: &mut BTreeSet<PathBuf>,
     files: &mut Vec<BagFile>,
 ) -> Result<()> {
+    let mut paths = Vec::new();
     visit_limited(root, 0, 12, &mut |path, is_dir| {
         if !is_dir {
-            let _ = push_file(path, category, home_dir, project_root, seen_files, files);
+            paths.push(path.to_path_buf());
         }
     });
+    paths.sort();
+    for path in paths {
+        push_file(&path, category, home_dir, project_root, seen_files, files)?;
+    }
     Ok(())
 }
 
@@ -185,7 +222,7 @@ fn slash_path(path: &Path) -> String {
         .join("/")
 }
 
-fn encrypt_payload(payload: &[u8], passphrase: &str) -> Result<Vec<u8>> {
+pub(crate) fn encrypt_payload(payload: &[u8], passphrase: &str) -> Result<Vec<u8>> {
     let mut salt = [0_u8; 16];
     let mut nonce = [0_u8; 24];
     OsRng.fill_bytes(&mut salt);
@@ -208,6 +245,18 @@ fn encrypt_payload(payload: &[u8], passphrase: &str) -> Result<Vec<u8>> {
     };
 
     Ok(serde_json::to_vec_pretty(&envelope)?)
+}
+
+pub(crate) fn decrypt_payload(encrypted: &[u8], passphrase: &str) -> Result<Vec<u8>> {
+    let envelope: EncryptedEnvelope = serde_json::from_slice(encrypted)?;
+    let salt = STANDARD.decode(envelope.salt_base64)?;
+    let nonce = STANDARD.decode(envelope.nonce_base64)?;
+    let payload = STANDARD.decode(envelope.payload_base64)?;
+    let key = derive_key(passphrase, &salt)?;
+    let cipher = XChaCha20Poly1305::new(Key::from_slice(&key));
+    cipher
+        .decrypt(XNonce::from_slice(&nonce), payload.as_ref())
+        .map_err(|_| anyhow!("failed to decrypt archive with the supplied passphrase"))
 }
 
 fn derive_key(passphrase: &str, salt: &[u8]) -> Result<[u8; 32]> {
@@ -249,6 +298,7 @@ mod tests {
             &report,
             &PackOptions {
                 selected_keys: vec!["codex".to_string()],
+                mode: PackMode::Selective,
                 output: output.clone(),
                 passphrase: "correct horse battery staple".to_string(),
             },
@@ -267,5 +317,33 @@ mod tests {
 
         let decrypted = decrypt_archive_bytes(&encrypted, "correct horse battery staple").unwrap();
         assert_eq!(decrypted.files.len(), archive.files.len());
+    }
+
+    #[test]
+    fn folder_mode_packs_unclassified_files_and_uses_portable_paths() {
+        let temp = tempfile::tempdir().unwrap();
+        let home = temp.path().join("home");
+        let project = temp.path().join("project");
+        fs::create_dir_all(home.join(".codex/state/cache")).unwrap();
+        fs::create_dir_all(&project).unwrap();
+        fs::write(home.join(".codex/state/cache/custom.bin"), b"whole folder").unwrap();
+
+        let report = scan_tools(&ScanOptions::new(home, project).home_only());
+        let output = temp.path().join("folder-mode.aibag");
+        let archive = pack_selected_tools(
+            &report,
+            &PackOptions {
+                selected_keys: vec!["codex".to_string()],
+                mode: PackMode::AgentFolders,
+                output,
+                passphrase: "correct horse battery staple".to_string(),
+            },
+        )
+        .unwrap();
+
+        assert!(archive.files.iter().any(|file| {
+            file.archive_path == "home/.codex/state/cache/custom.bin"
+                && file.category == Category::AgentFolder
+        }));
     }
 }

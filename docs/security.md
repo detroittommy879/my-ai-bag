@@ -8,6 +8,8 @@ My AI Bag treats AI coding setup files as sensitive by default.
 - Pack preview output does not include file contents.
 - Secret-looking files are detected by name, such as `auth`, `token`, `credential`, `session`, `.env`, and similar terms.
 - CLI export encrypts the archive with Argon2id key derivation and XChaCha20-Poly1305 authenticated encryption.
+- Credential inventory preview has a separate redacted data shape, so normal and `--json` output cannot serialize discovered key values.
+- Complete-folder packing and skill collection skip symbolic links.
 - The UI does not export yet; it previews what would be included.
 
 ## Encryption Details
@@ -23,9 +25,11 @@ This is a reasonable prototype choice, but it is not a final audited backup form
 - There is no hosted sync service.
 - There is no per-file approval UI yet.
 - Filename heuristics can miss tool-specific secrets or classify harmless files as sensitive.
+- Credential extraction from JSON, TOML, YAML, and `.env` files is heuristic. It can miss custom fields and should not replace the complete-folder backup mode.
+- Central skill libraries are plaintext and may contain executable scripts.
 
 ## Handling `.aibag` Files
 
-Treat an `.aibag` file like a password manager export. It may contain auth files, tokens, settings, and private skills from selected tools.
+Treat an `.aibag` file like a password manager export. It may contain auth files, tokens, normalized API keys, settings, and private skills from selected tools.
 
 Use long passphrases, keep exports local, and delete test archives when you are done with them.

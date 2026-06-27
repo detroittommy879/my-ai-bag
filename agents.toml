@@ -3,6 +3,9 @@
 # This file is intentionally TOML instead of JSON so contributors can add or
 # review agents without touching Rust code. Paths are relative to either the
 # user home directory or the current project directory, depending on the field.
+# Optional `home_roots` and `project_roots` arrays can override which complete
+# agent folders are used by `pack --mode folders`. When omitted, roots are
+# derived from `detected_if_exists` and the top-level project skills folder.
 
 [[agents]]
 key = "cursor"
